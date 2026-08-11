@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CareerCard, type CareerCardData } from "./CareerCard";
+import { renderBold } from "@/lib/formatted-text";
 
 type SseEvent =
   | { type: "summary_text"; text: string }
@@ -27,6 +29,7 @@ export function ReportStream({ sessionId }: { sessionId: string }) {
   const [attempt, setAttempt] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +107,8 @@ export function ReportStream({ sessionId }: { sessionId: string }) {
                 break;
               case "done":
                 setDone(true);
+                // Server Component を再実行し、静的カード表示＋一覧からの6件除外を確定させる
+                router.refresh();
                 break;
             }
           }
@@ -123,7 +128,7 @@ export function ReportStream({ sessionId }: { sessionId: string }) {
       cancelled = true;
       controller.abort();
     };
-  }, [sessionId, attempt]);
+  }, [sessionId, attempt, router]);
 
   const sortedCards = Object.values(cards).sort((a, b) => a.rank - b.rank);
 
@@ -131,8 +136,8 @@ export function ReportStream({ sessionId }: { sessionId: string }) {
     <div className="flex flex-col gap-10">
       <section>
         {summaryText ? (
-          <p className="text-xl font-medium leading-relaxed tracking-tight text-balance">
-            {summaryText}
+          <p className="text-xl font-medium leading-relaxed tracking-tight text-balance whitespace-pre-wrap">
+            {renderBold(summaryText)}
           </p>
         ) : (
           !error && (

@@ -1,3 +1,5 @@
+import { renderBold } from "@/lib/formatted-text";
+
 export interface CareerCardData {
   careerId: string;
   rank: number;
@@ -42,7 +44,9 @@ export function CareerCard({ card }: { card: CareerCardData }) {
 
       <Section title="あなたに薦める理由">
         {card.reason ? (
-          <p className="text-sm leading-relaxed">{card.reason}</p>
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">
+            {renderBold(card.reason)}
+          </p>
         ) : (
           <div className="flex flex-col gap-1.5 py-1">
             <div className="h-3 w-full animate-pulse rounded bg-border" />

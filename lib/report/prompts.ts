@@ -7,6 +7,14 @@ export function collectTags(themeResults: ThemeResult[]): string[] {
   return themeResults.flatMap((r) => r.tags);
 }
 
+/**
+ * レポート生成の入力として使えるテーマ結果（スキップ済み・要約なしを除く）。
+ * app/api/report/route.ts とレポート画面の職業一覧が同じ母集団を見るための共通条件。
+ */
+export function selectReportThemeResults(results: ThemeResult[]): ThemeResult[] {
+  return results.filter((r) => !r.skipped && r.summary);
+}
+
 /** 対話中に前倒し生成済みの気づきカードを、レポート生成の入力用にまとめる */
 export function buildStudentProfileText(themeResults: ThemeResult[]): string {
   return themeResults

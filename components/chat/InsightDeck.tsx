@@ -1,4 +1,5 @@
 import { tagLabel } from "@/lib/tags";
+import { renderBold } from "@/lib/formatted-text";
 
 export interface InsightCardData {
   themeId: string;
@@ -22,9 +23,11 @@ export function InsightDeck({ insights }: { insights: InsightCardData[] }) {
           {insights.map((insight) => (
             <div key={insight.themeId} className="rounded-lg border border-border bg-card p-3">
               <p className="text-[11px] text-muted">{insight.themeTitle}</p>
-              <p className="mt-1 text-sm italic leading-relaxed">「{insight.quote}」</p>
-              <p className="mt-1.5 text-sm font-medium text-accent">{insight.label}</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted">{insight.reframe}</p>
+              <p className="mt-1 text-sm italic leading-relaxed">「{renderBold(insight.quote)}」</p>
+              <p className="mt-1.5 text-sm font-medium text-accent">{renderBold(insight.label)}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted">
+                {renderBold(insight.reframe)}
+              </p>
             </div>
           ))}
         </div>

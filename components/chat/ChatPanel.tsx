@@ -56,6 +56,16 @@ export function ChatPanel({
 
   const abortRef = useRef<AbortController | null>(null);
 
+  // 応答完了時、Composer(入力欄)を画面内に自動スクロールするための仕掛け。
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const prevSendingRef = useRef(sending);
+  const prevInsightCountRef = useRef(insights.length);
+  const followRef = useRef(false); // ユーザーが自分でスクロールしたら追従をやめる
+
+  function scrollToComposer(behavior: ScrollBehavior) {
+    bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+  }
+
   async function completeTheme(finishedThemeId: string) {
     try {
       const res = await fetch("/api/theme/complete", {
@@ -85,6 +95,43 @@ export function ChatPanel({
 
   useEffect(() => {
     return () => abortRef.current?.abort();
+  }, []);
+
+  // (a) 応答完了(sending: true→false)の立ち下がりでのみスクロールする。
+  // ストリーミング中(sending中)は追従しない — 要望は「生成されたら」であり、
+  // 生成中に動くと読んでいる最中に画面が動いて不快なため。
+  useEffect(() => {
+    const wasSending = prevSendingRef.current;
+    prevSendingRef.current = sending;
+    if (!wasSending || sending) return;
+
+    followRef.current = true;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scrollToComposer(reduce ? "auto" : "smooth");
+  }, [sending]);
+
+  // (b) completeTheme() は await されずに走るため、sending が false になった
+  // "後" に insights が増えて InsightDeck(メッセージ一覧より上)が伸び、
+  // Composer が再び押し下げられることがある。その分だけ追従し直す。
+  useEffect(() => {
+    const prev = prevInsightCountRef.current;
+    prevInsightCountRef.current = insights.length;
+    if (insights.length <= prev || !followRef.current) return;
+
+    scrollToComposer("auto");
+  }, [insights.length]);
+
+  // (c) ユーザーが自分でスクロールしたら自動追従をやめる。
+  useEffect(() => {
+    const stop = () => {
+      followRef.current = false;
+    };
+    window.addEventListener("wheel", stop, { passive: true });
+    window.addEventListener("touchmove", stop, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchmove", stop);
+    };
   }, []);
 
   async function runChatRequest(requestBody: Record<string, unknown>) {
@@ -241,6 +288,7 @@ export function ChatPanel({
           </Link>
         </div>
         <InsightDeck insights={insights} />
+        <div ref={bottomRef} aria-hidden className="h-0" />
       </div>
     );
   }
@@ -284,6 +332,7 @@ export function ChatPanel({
         disabled={sending}
         fallbackChoices={theme.fallbackChoices}
       />
+      <div ref={bottomRef} aria-hidden className="h-0" />
     </div>
   );
 }

@@ -7,10 +7,14 @@ import {
   listCareerMatches,
 } from "@/lib/db/queries";
 import { getCareerById, getCategoryLabel } from "@/lib/careers/catalog";
+import { buildExplorerItems, explorerCategories } from "@/lib/careers/explore";
 import { getTheme } from "@/lib/dialogue/themes";
+import { collectTags, selectReportThemeResults } from "@/lib/report/prompts";
 import { InsightDeck, type InsightCardData } from "@/components/chat/InsightDeck";
 import { ReportStream } from "@/components/report/ReportStream";
 import { CareerCard, type CareerCardData } from "@/components/report/CareerCard";
+import { CareerExplorer } from "@/components/report/CareerExplorer";
+import { renderBold } from "@/lib/formatted-text";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +44,9 @@ export default async function ReportPage({
     );
   }
 
-  const insights: InsightCardData[] = listThemeResults(id)
+  const themeResults = listThemeResults(id);
+
+  const insights: InsightCardData[] = themeResults
     .filter((r) => !r.skipped && r.quote && r.label && r.reframe)
     .map((r) => ({
       themeId: r.themeId,
@@ -54,8 +60,16 @@ export default async function ReportPage({
   const report = getReport(id);
   const isComplete = report?.status === "complete";
 
+  // LLMの選定結果とは独立に、保存済みタグから毎回決定論的に計算する
+  // （LLM呼び出し・DB書き込みなし。生成中でも即座に表示できる）。
+  const matches = listCareerMatches(id);
+  const featuredIds = matches.map((m) => m.careerId);
+  const studentTags = collectTags(selectReportThemeResults(themeResults));
+  const explorerItems = buildExplorerItems(studentTags, featuredIds);
+  const explorerCategoriesList = explorerCategories(explorerItems);
+
   const staticCards: CareerCardData[] = isComplete
-    ? listCareerMatches(id)
+    ? matches
         .map((m) => {
           const career = getCareerById(m.careerId);
           if (!career) return null;
@@ -89,8 +103,8 @@ export default async function ReportPage({
           {isComplete ? (
             <>
               <section>
-                <p className="text-xl font-medium leading-relaxed tracking-tight text-balance">
-                  {report.profileMd}
+                <p className="text-xl font-medium leading-relaxed tracking-tight text-balance whitespace-pre-wrap">
+                  {renderBold(report.profileMd)}
                 </p>
               </section>
 
@@ -142,6 +156,25 @@ export default async function ReportPage({
             </section>
           ) : (
             <ReportStream sessionId={id} />
+          )}
+
+          {explorerItems.length > 0 && (
+            <section>
+              <h2 className="text-lg font-semibold tracking-tight">
+                ほかにもこんな仕事があります
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                世の中の仕事はもっとたくさんあります。カテゴリを切り替えて、気になるものを
+                眺めてみてください。
+              </p>
+              <div className="mt-4">
+                <CareerExplorer items={explorerItems} categories={explorerCategoriesList} />
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-muted">
+                ※ バーは、あなたのキーワードとその仕事の特徴がどれくらい重なっているかの
+                目安です。上の「あなたに合いそうな仕事」の適合度とは別の指標です。
+              </p>
+            </section>
           )}
         </div>
       </main>

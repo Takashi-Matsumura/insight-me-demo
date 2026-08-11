@@ -22,6 +22,7 @@ import {
   buildSelectionMessages,
   buildSummaryMessages,
   collectTags,
+  selectReportThemeResults,
 } from "@/lib/report/prompts";
 import { validateAndBackfillPicks } from "@/lib/report/selection";
 
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "対話がまだ完了していません" }, { status: 400 });
   }
 
-  const themeResults = listThemeResults(sessionId).filter((r) => !r.skipped && r.summary);
+  const themeResults = selectReportThemeResults(listThemeResults(sessionId));
   if (themeResults.length === 0) {
     return Response.json(
       { error: "レポートを作成できるだけの対話がありません" },

@@ -1,3 +1,7 @@
+"use client";
+
+import { useRef } from "react";
+
 interface ComposerProps {
   value: string;
   onChange: (value: string) => void;
@@ -17,6 +21,11 @@ export function Composer({
   disabled,
   fallbackChoices,
 }: ComposerProps) {
+  // IME変換確定のEnterで誤送信しないためのフラグ。
+  // ブラウザによっては確定Enterの keydown で isComposing が既に false になっている
+  // ことがあるため、onCompositionStart/End での自前追跡と keyCode===229 の両方で防御する。
+  const isComposingRef = useRef(false);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
@@ -43,11 +52,24 @@ export function Composer({
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            isComposingRef.current = false;
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (!disabled && value.trim()) onSubmit();
+            if (
+              e.key !== "Enter" ||
+              e.shiftKey ||
+              isComposingRef.current ||
+              e.nativeEvent.isComposing ||
+              e.keyCode === 229
+            ) {
+              return;
             }
+            e.preventDefault();
+            if (!disabled && value.trim()) onSubmit();
           }}
           disabled={disabled}
           rows={2}

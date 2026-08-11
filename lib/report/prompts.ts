@@ -83,3 +83,36 @@ export function buildReasonMessages(career: Career, themeResults: ThemeResult[])
     },
   ];
 }
+
+/** 職業一覧ダイアログの「AIにもっと詳しく書いてもらう」用。buildReasonMessages との違いは、
+ *  職業側の情報を detail/dayInLife/goodFit まで渡して「具体的な場面」を特定させる点。
+ *  理由付けではなく、場面と本人の紐付けを書かせる。 */
+export function buildCareerFitMessages(
+  career: Career,
+  themeResults: ThemeResult[],
+): LlmMessage[] {
+  const quotes = themeResults
+    .filter((r) => r.quote)
+    .map((r) => `・「${r.quote}」（${getTheme(r.themeId)?.title ?? r.themeId}）`)
+    .join("\n");
+
+  return [
+    {
+      role: "system",
+      content:
+        `あなたは新卒学生向けのキャリアアドバイザーです。\n\n` +
+        `【あなたが聞いた学生の言葉】\n${quotes}\n\n` +
+        `【職種】${career.name}\n` +
+        `仕事内容: ${career.detail}\n` +
+        `ある一日: ${career.dayInLife}\n` +
+        `求められる素質: ${career.goodFit}\n\n` +
+        "この仕事の「どの場面で」この学生の力が発揮されそうかを150字程度で書いてください。\n" +
+        "必ず次の2つを含めること:\n" +
+        "(1) 上の仕事内容・ある一日から、具体的な場面をひとつ取り出す\n" +
+        "(2) 本人の言葉を1つ「」で引用し、その場面と結びつける\n" +
+        "職種の一般的な説明や、誰にでも当てはまる話は書かないこと。" +
+        "断定しすぎず「〜かもしれません」のような余白を残すこと。" +
+        "本文だけを出力し、前置きや見出しは付けないこと。",
+    },
+  ];
+}

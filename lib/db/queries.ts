@@ -363,3 +363,21 @@ export function listCareerMatches(sessionId: string): CareerMatch[] {
     .all(sessionId) as unknown as CareerMatchRow[];
   return rows.map(mapCareerMatch);
 }
+
+// ---------- career_fits ----------
+// 職業一覧ダイアログの「AIにもっと詳しく書いてもらう」結果のキャッシュ。
+// career_matches（おすすめ6件専用）とは別テーブル。最大70件/セッション入りうる。
+
+export function getCareerFit(sessionId: string, careerId: string): string | undefined {
+  const row = db
+    .prepare("SELECT text FROM career_fits WHERE session_id = ? AND career_id = ?")
+    .get(sessionId, careerId) as unknown as { text: string } | undefined;
+  return row?.text;
+}
+
+export function upsertCareerFit(sessionId: string, careerId: string, text: string): void {
+  db.prepare(
+    `INSERT INTO career_fits (session_id, career_id, text) VALUES (?, ?, ?)
+     ON CONFLICT(session_id, career_id) DO UPDATE SET text = excluded.text`,
+  ).run(sessionId, careerId, text);
+}

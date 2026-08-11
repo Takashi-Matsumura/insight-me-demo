@@ -57,3 +57,14 @@ CREATE TABLE IF NOT EXISTS career_matches (
   UNIQUE(session_id, career_id)
 );
 CREATE INDEX IF NOT EXISTS idx_matches_session ON career_matches(session_id, rank);
+
+-- ダイアログの「あなたの力が活きるところ」をAIに書かせた結果のキャッシュ。
+-- career_matches（おすすめ6件専用・listCareerMatches が全件返す前提）とは
+-- 意図的に分離する。ここには最大70件/セッション入りうる。
+CREATE TABLE IF NOT EXISTS career_fits (
+  session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  career_id   TEXT NOT NULL,
+  text        TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (session_id, career_id)
+);

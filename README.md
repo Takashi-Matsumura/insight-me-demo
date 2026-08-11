@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# InsightMe
 
-## Getting Started
+インターン中の学生が、生成AIとの対話を通じて「本当の自分」への気づきを得て、
+将来の職業候補を見つけるためのデモアプリです。学生は世の中にどんな職業・職種が
+あるかをあまり知らないため、対話を通じた自己理解を、学生がまだ知らないかもしれない
+職業候補へと確実につなげることを目指しています。LLM はこの PC 上で常駐する
+llama.cpp をそのまま利用し、外部 API には接続しません。
 
-First, run the development server:
+## 主な機能
+
+- **5テーマの動的な対話** — 「熱中したこと」「人との関わり方」など5つのテーマを、
+  AI が学生の回答に応じて2〜3回まで深掘りしながら進行（SSE によるストリーミング表示）
+- **気づきカード** — テーマ完了ごとに、本人の発言をそのまま引用しつつ職業的な強みへ
+  言い換えたカードを自動生成。対話の裏で生成されるため待ち時間はほぼゼロ
+- **職業マスタ70件 × 2段階選定** — 職業マスタは決定論的なタグマッチングで18件に
+  絞り込んでから LLM が6件を選定。学生が知らないであろう職種（`obscurity` 3〜5）を
+  必ず候補に含める設計
+- **段階配信レポート** — 自己理解サマリの生成（ストリーミング）と職種選定（構造化
+  出力）を並列実行し、理由付けは6件を並列生成。生成途中でリロードしても未生成分
+  だけ再開できる
+- **メンター用ビュー** (`/mentor`) — 学生の対話ログとレポートを一覧・閲覧できる
+  簡易な管理画面
+
+## 前提条件
+
+- **Node.js 24 以上**（`node:sqlite` を使用しているため）
+- **このPC上で稼働している llama.cpp サーバ**
+  - デフォルトでは `http://127.0.0.1:8080` の OpenAI 互換エンドポイントに接続します
+  - モデルは `gemma-4-12b-it-Q4_K_M.gguf` を想定（`LLAMA_MODEL` 環境変数で変更可）
+  - `curl http://127.0.0.1:8080/health` で `{"status":"ok"}` が返ることを確認してください
+  - サーバが応答しない場合、アプリ上部にバナーが表示されます（自動復旧を待つか、
+    llama.cpp を起動してください）
+
+## 開発サーバの起動
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+[http://localhost:3000](http://localhost:3000) を開いてください。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- 学生向け対話: `/`（トップページから開始）
+- メンター用の閲覧画面: `/mentor`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## データベース
 
-## Learn More
+`node:sqlite`（Node.js 標準組み込み）を使ったローカル SQLite で、追加の
+ミドルウェアやサーバは不要です。データは `data/insight-me.db` に保存されます
+（Git 管理外）。スキーマは `lib/db/schema.sql` に定義されており、起動時に
+自動で適用されます。
 
-To learn more about Next.js, take a look at the following resources:
+## 環境変数（任意）
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| 変数 | 既定値 | 用途 |
+| --- | --- | --- |
+| `LLAMA_BASE_URL` | `http://127.0.0.1:8080` | llama.cpp サーバのURL |
+| `LLAMA_MODEL` | `gemma-4-12b-it-Q4_K_M.gguf` | 使用するモデル名 |
+| `LLAMA_MAX_CONCURRENCY` | `2` | llama.cpp への同時リクエスト数の上限 |
+| `DATABASE_PATH` | `data/insight-me.db` | SQLite ファイルの場所 |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`LLAMA_MAX_CONCURRENCY` について: 実測で llama.cpp を4並列で叩くと
+KVキャッシュ復元に失敗してサーバがクラッシュすることを確認しています。
+既定の 2 から上げないことを推奨します。
 
-## Deploy on Vercel
+## 検証
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npx tsc --noEmit   # 型チェック
+npm run lint       # ESLint
+npm run build      # 本番ビルド（Turbopack）
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 技術構成
+
+- Next.js 16 (App Router, Turbopack) / React 19 / TypeScript / Tailwind CSS v4
+- 追加の外部依存なし（DB・SSE・UUIDはすべて標準APIで実装）

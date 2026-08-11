@@ -1,3 +1,5 @@
+import { renderBold } from "@/lib/formatted-text";
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -44,7 +46,7 @@ function Bubble({
             : "border border-border bg-card text-foreground")
         }
       >
-        {pending ? <TypingDots /> : content}
+        {pending ? <TypingDots /> : isUser ? content : renderBold(content)}
       </div>
     </div>
   );

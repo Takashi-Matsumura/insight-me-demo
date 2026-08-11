@@ -7,7 +7,7 @@ import {
   listCareerMatches,
 } from "@/lib/db/queries";
 import { getCareerById, getCategoryLabel } from "@/lib/careers/catalog";
-import { buildExplorerItems, explorerCategories } from "@/lib/careers/explore";
+import { buildExplorer } from "@/lib/careers/explore";
 import { getTheme } from "@/lib/dialogue/themes";
 import { collectTags, selectReportThemeResults } from "@/lib/report/prompts";
 import { InsightDeck, type InsightCardData } from "@/components/chat/InsightDeck";
@@ -61,12 +61,23 @@ export default async function ReportPage({
   const isComplete = report?.status === "complete";
 
   // LLMの選定結果とは独立に、保存済みタグから毎回決定論的に計算する
-  // （LLM呼び出し・DB書き込みなし。生成中でも即座に表示できる）。
+  // （LLM呼び出し・DB書き込みなし。生成中でも即座に表示でき、過去の完了済み
+  //   セッションにも同じ内容が出る）。
   const matches = listCareerMatches(id);
   const featuredIds = matches.map((m) => m.careerId);
   const studentTags = collectTags(selectReportThemeResults(themeResults));
-  const explorerItems = buildExplorerItems(studentTags, featuredIds);
-  const explorerCategoriesList = explorerCategories(explorerItems);
+  const explorer = buildExplorer({
+    studentTags,
+    excludeIds: featuredIds,
+    insights: insights.map((i) => ({
+      themeTitle: i.themeTitle,
+      label: i.label,
+      reframe: i.reframe,
+      tags: i.tags,
+    })),
+    // report は生成完了前は undefined。strengths が無くても気づきカード側で fit は成立する
+    strengths: report?.strengths ?? [],
+  });
 
   const staticCards: CareerCardData[] = isComplete
     ? matches
@@ -158,17 +169,26 @@ export default async function ReportPage({
             <ReportStream sessionId={id} />
           )}
 
-          {explorerItems.length > 0 && (
+          {explorer.items.length > 0 && (
             <section>
               <h2 className="text-lg font-semibold tracking-tight">
                 ほかにもこんな仕事があります
               </h2>
               <p className="mt-1 text-sm text-muted">
                 世の中の仕事はもっとたくさんあります。カテゴリを切り替えて、気になるものを
-                眺めてみてください。
+                眺めてみてください。{" "}
+                <strong className="font-medium text-foreground">
+                  気になった仕事をタップすると、どんな仕事か・あなたの力がどこで活きそうかが
+                  読めます。
+                </strong>
               </p>
               <div className="mt-4">
-                <CareerExplorer items={explorerItems} categories={explorerCategoriesList} />
+                <CareerExplorer
+                  items={explorer.items}
+                  categories={explorer.categories}
+                  evidences={explorer.evidences}
+                  sessionId={id}
+                />
               </div>
               <p className="mt-3 text-xs leading-relaxed text-muted">
                 ※ バーは、あなたのキーワードとその仕事の特徴がどれくらい重なっているかの

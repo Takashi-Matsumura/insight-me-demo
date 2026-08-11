@@ -1,16 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import type { CareerExplorerItem, ExplorerCategory } from "@/lib/careers/explore";
+import type { CareerExplorerItem, ExplorerCategory, FitEvidence } from "@/lib/careers/explore";
+import { CareerDialog } from "./CareerDialog";
 
 export function CareerExplorer({
   items,
   categories,
+  evidences,
+  sessionId,
 }: {
   items: CareerExplorerItem[];
   categories: ExplorerCategory[];
+  evidences: FitEvidence[];
+  sessionId: string;
 }) {
   const [categoryId, setCategoryId] = useState<string | null>(null); // null = すべて
+  const [selected, setSelected] = useState<CareerExplorerItem | null>(null);
+  // careerId → AIが生成した詳しい文章。ダイアログを閉じても保持し、同セッション内での
+  // 再オープンを即時にする（DBキャッシュとは別に、クライアント側でも持ち上げる）。
+  const [aiFits, setAiFits] = useState<Map<string, string>>(new Map());
   const visible = categoryId ? items.filter((i) => i.categoryId === categoryId) : items;
 
   return (
@@ -33,7 +42,17 @@ export function CareerExplorer({
 
       <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
         {visible.map((item) => (
-          <div key={item.careerId} className="flex items-center justify-between gap-4 px-4 py-3">
+          <button
+            key={item.careerId}
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setSelected(item)}
+            className={
+              "flex w-full items-center justify-between gap-4 px-4 py-3 text-left " +
+              "transition-colors hover:bg-accent/5 " +
+              "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+            }
+          >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
                 <p className="text-sm font-medium">{item.name}</p>
@@ -58,8 +77,12 @@ export function CareerExplorer({
               <span className="w-10 text-right text-[11px] text-muted">
                 {item.matchPct > 0 ? `${item.matchPct}%` : "—"}
               </span>
+              {/* 行がクリックできることの手がかり。バーだけだと不活性に見えるため */}
+              <span className="text-muted" aria-hidden>
+                ›
+              </span>
             </div>
-          </div>
+          </button>
         ))}
         {visible.length === 0 && (
           <p className="px-4 py-6 text-sm text-muted">
@@ -67,6 +90,17 @@ export function CareerExplorer({
           </p>
         )}
       </div>
+
+      <CareerDialog
+        item={selected}
+        evidences={evidences}
+        sessionId={sessionId}
+        aiFits={aiFits}
+        onAiFitLoaded={(careerId, text) =>
+          setAiFits((prev) => new Map(prev).set(careerId, text))
+        }
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }

@@ -45,3 +45,16 @@ body {
     "Yu Gothic",
     sans-serif;
 }
+
+/* ネイティブ <dialog> の backdrop。
+   Tailwind preflight は ::backdrop の margin/padding を消すだけで色を付けず、
+   UA 既定（Chrome: rgba(0,0,0,0.1)）は薄すぎて背面と分離しないため明示する。 */
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  dialog::backdrop {
+    background: rgb(0 0 0 / 0.7);
+  }
+}

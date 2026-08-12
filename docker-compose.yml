@@ -1,0 +1,21 @@
+services:
+  insight-me:
+    build: .
+    image: insight-me-demo:latest
+    container_name: insight-me-demo
+    restart: unless-stopped
+    ports:
+      - "8040:3000"
+    environment:
+      - LLAMA_BASE_URL=http://host.docker.internal:8080
+      - LLAMA_MODEL=gemma-4-12b-it-Q4_K_M.gguf
+      - LLAMA_MAX_CONCURRENCY=2
+      - DATABASE_PATH=/app/data/insight-me.db
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

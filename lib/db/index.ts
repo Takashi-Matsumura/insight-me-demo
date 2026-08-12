@@ -8,6 +8,9 @@ function createDb(): DatabaseSync {
 
   const file = process.env.DATABASE_PATH ?? path.join(dataDir, "insight-me.db");
   const db = new DatabaseSync(file);
+  // ビルド時は複数ワーカーが同時に同じ新規DBファイルへスキーマを適用しようとし、
+  // 書き込みロックが競合して SQLITE_BUSY (database is locked) になることがある。
+  db.exec("PRAGMA busy_timeout = 5000;");
 
   const schemaPath = path.join(process.cwd(), "lib", "db", "schema.sql");
   db.exec(readFileSync(schemaPath, "utf8"));

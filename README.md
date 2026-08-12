@@ -71,6 +71,30 @@ npm run lint       # ESLint
 npm run build      # 本番ビルド（Turbopack）
 ```
 
+## Docker / Colima でのデプロイ（社内サーバ運用）
+
+このMac Studioを社内サーバとして使う場合、Colima 上の Docker コンテナとして
+稼働させます。コンテナからホスト上の llama.cpp サーバへは `host.docker.internal`
+経由で接続します（`docker-compose.yml` の `LLAMA_BASE_URL` で設定済み）。
+
+前提: `colima start` でColimaが起動していること、ホストの `127.0.0.1:8080` で
+llama.cpp が稼働していること。
+
+```bash
+docker-compose build      # イメージのビルド
+docker-compose up -d      # バックグラウンドで起動
+docker-compose logs -f    # ログ確認
+docker-compose down       # 停止（データは ./data に永続化されるため消えない）
+```
+
+- SQLiteデータベースはホスト側の `./data` ディレクトリにバインドマウントされ、
+  コンテナの再作成・再起動をしてもデータは保持されます。
+- `restart: unless-stopped` により、Colima/Docker再起動時にもコンテナは自動復帰します。
+- ホスト側の公開ポートは `8040`（社内公開中の他コンテナが8000番台を使用しているため、
+  重複しない番号を選定）。コンテナ内部は3000番のまま。
+- 動作確認: `curl http://localhost:8040/api/health` で `{"ok":true}` が返れば、
+  コンテナから llama.cpp への接続も含めて正常です。
+
 ## 技術構成
 
 - Next.js 16 (App Router, Turbopack) / React 19 / TypeScript / Tailwind CSS v4

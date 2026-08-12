@@ -53,6 +53,12 @@ export function ChatPanel({
   const [canRetry, setCanRetry] = useState(false);
   const [completed, setCompleted] = useState(initialCompleted);
   const [insights, setInsights] = useState<InsightCardData[]>(initialInsights);
+  // テーマ1問目の回答候補ボタンは、深掘り質問には合わない選択肢のまま残り続けると
+  // 学生が回答に迷うため、2問目以降はデフォルトで隠す。「うまく言えない」を押した
+  // ときだけ取っかかりとして再表示する(handleStuck 参照)。
+  // 初期値: リロード時は現テーマの既存メッセージが0件なら1問目とみなす
+  // (initialMessages はオープナーを含まない現テーマぶんの既存メッセージのみ)。
+  const [showChoices, setShowChoices] = useState(initialMessages.length === 0);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -198,6 +204,7 @@ export function ChatPanel({
               } else if (evt.nextThemeId) {
                 setThemeId(evt.nextThemeId);
                 setMessages(seedMessages(evt.nextThemeId, []));
+                setShowChoices(true); // 新テーマの1問目は選択肢を見せる
               }
             }
           }
@@ -220,6 +227,7 @@ export function ChatPanel({
     const text = input.trim();
     if (!text || sending) return;
     setInput("");
+    setShowChoices(false); // 送信したら1問目用の選択肢は役目を終える
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     void runChatRequest({ userText: text });
   }
@@ -250,6 +258,7 @@ export function ChatPanel({
       } else if (data.nextThemeId) {
         setThemeId(data.nextThemeId);
         setMessages(seedMessages(data.nextThemeId, []));
+        setShowChoices(true); // 新テーマの1問目は選択肢を見せる
       }
     } catch (e) {
       setError({
@@ -262,6 +271,7 @@ export function ChatPanel({
   }
 
   function handleStuck() {
+    setShowChoices(true); // 取っかかりとして1問目用の選択肢を再表示する
     setMessages((prev) => [
       ...prev,
       {
@@ -330,7 +340,7 @@ export function ChatPanel({
         onSkip={handleSkip}
         onStuck={handleStuck}
         disabled={sending}
-        fallbackChoices={theme.fallbackChoices}
+        fallbackChoices={showChoices ? theme.fallbackChoices : []}
       />
       <div ref={bottomRef} aria-hidden className="h-0" />
     </div>

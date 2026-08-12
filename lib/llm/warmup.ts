@@ -1,6 +1,7 @@
 import { rawCall } from "./client";
 import { buildTurnSystemPrompt } from "@/lib/dialogue/prompts";
 import { THEMES } from "@/lib/dialogue/themes";
+import { DEFAULT_READING_LEVEL } from "@/lib/reading-level";
 
 /**
  * 起動直後にダミーのシステムプロンプトを1回投げて、llama.cpp のプロンプトキャッシュを
@@ -9,7 +10,7 @@ import { THEMES } from "@/lib/dialogue/themes";
  */
 export async function warmup(): Promise<void> {
   const theme = THEMES[0];
-  const systemPrompt = buildTurnSystemPrompt(theme, 0);
+  const systemPrompt = buildTurnSystemPrompt(theme, 0, DEFAULT_READING_LEVEL);
   try {
     await rawCall({
       messages: [

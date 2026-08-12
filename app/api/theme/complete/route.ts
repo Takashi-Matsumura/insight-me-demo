@@ -70,6 +70,7 @@ export async function POST(request: Request) {
     const messages = buildInsightMessages(
       theme,
       history.map((m) => ({ role: m.role, content: m.content })),
+      session.readingLevel,
     );
     const card = await generateStructured<InsightCardResult>({
       messages,

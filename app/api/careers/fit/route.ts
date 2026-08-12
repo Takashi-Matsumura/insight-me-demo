@@ -20,7 +20,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "sessionId と careerId が必要です" }, { status: 400 });
   }
 
-  if (!getSession(sessionId)) {
+  const session = getSession(sessionId);
+  if (!session) {
     return Response.json({ error: "セッションが見つかりません" }, { status: 404 });
   }
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
 
   try {
     const text = await generateText({
-      messages: buildCareerFitMessages(career, themeResults),
+      messages: buildCareerFitMessages(career, themeResults, session.readingLevel),
       maxTokens: 200,
       temperature: 0.7,
       // 学生が画面の前で待っているので、レポートのバッチ生成より優先度を上げる

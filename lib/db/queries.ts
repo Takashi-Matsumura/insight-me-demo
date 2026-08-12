@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./index";
+import { normalizeReadingLevel, type ReadingLevel } from "@/lib/reading-level";
 
 // ---------- 型 ----------
 
@@ -13,6 +14,7 @@ export interface Session {
   probeCount: number;
   createdAt: string;
   updatedAt: string;
+  readingLevel: ReadingLevel;
 }
 
 export interface Message {
@@ -70,6 +72,7 @@ interface SessionRow {
   probe_count: number;
   created_at: string;
   updated_at: string;
+  reading_level: string;
 }
 function mapSession(row: SessionRow): Session {
   return {
@@ -80,6 +83,9 @@ function mapSession(row: SessionRow): Session {
     probeCount: row.probe_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    // 手編集されたDBや、万一マイグレーション前の行を読んだ場合(undefined)でも
+    // 必ず有効な値に落とす
+    readingLevel: normalizeReadingLevel(row.reading_level),
   };
 }
 
@@ -175,9 +181,11 @@ function mapCareerMatch(row: CareerMatchRow): CareerMatch {
 
 // ---------- sessions ----------
 
-export function createSession(studentName: string): Session {
+export function createSession(studentName: string, readingLevel: ReadingLevel): Session {
   const id = randomUUID();
-  db.prepare("INSERT INTO sessions (id, student_name) VALUES (?, ?)").run(id, studentName);
+  db.prepare(
+    "INSERT INTO sessions (id, student_name, reading_level) VALUES (?, ?, ?)",
+  ).run(id, studentName, readingLevel);
   const session = getSession(id);
   if (!session) throw new Error("セッションの作成に失敗しました");
   return session;

@@ -1,3 +1,10 @@
+import {
+  DEFAULT_READING_LEVEL,
+  READING_LEVELS,
+  READING_LEVEL_HINT,
+  READING_LEVEL_LABEL,
+} from "@/lib/reading-level";
+
 export default function Home() {
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-16">
@@ -31,6 +38,41 @@ export default function Home() {
             placeholder="例：山田 太郎"
             className="rounded-lg border border-border bg-card px-4 py-3 text-base outline-none focus:ring-2 focus:ring-accent"
           />
+
+          <fieldset className="mt-4">
+            <legend className="text-sm font-medium">AIが話す文章のレベル</legend>
+            <p className="mt-1 text-xs text-muted">
+              ふだん読んでいる文章に近いものを選んでください。あとから変更はできません。
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {READING_LEVELS.map((level) => (
+                <label
+                  key={level}
+                  className={
+                    "cursor-pointer rounded-lg border border-border bg-card px-3 py-2.5 transition-colors " +
+                    "hover:border-accent " +
+                    "has-[:checked]:border-accent has-[:checked]:bg-accent/10 " +
+                    "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent"
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="readingLevel"
+                    value={level}
+                    defaultChecked={level === DEFAULT_READING_LEVEL}
+                    className="sr-only"
+                  />
+                  <span className="block text-sm font-medium">
+                    {READING_LEVEL_LABEL[level]}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-muted">
+                    {READING_LEVEL_HINT[level]}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
           <button
             type="submit"
             className="mt-2 rounded-lg bg-accent px-4 py-3 font-medium text-accent-foreground transition-opacity hover:opacity-90"

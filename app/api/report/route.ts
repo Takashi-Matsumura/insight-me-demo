@@ -108,17 +108,21 @@ export async function POST(request: Request) {
           const [summaryText, selection] = await Promise.all([
             (async () => {
               let acc = "";
-              for await (const piece of streamText(buildSummaryMessages(profileText), {
-                maxTokens: 320,
-                signal: request.signal,
-              })) {
+              for await (const piece of streamText(
+                buildSummaryMessages(profileText, session.readingLevel),
+                { maxTokens: 320, signal: request.signal },
+              )) {
                 acc += piece;
                 send({ type: "summary_text", text: piece });
               }
               return acc.trim();
             })(),
             generateStructured<CareerSelectionResult>({
-              messages: buildSelectionMessages(profileText, prefiltered.candidates),
+              messages: buildSelectionMessages(
+                profileText,
+                prefiltered.candidates,
+                session.readingLevel,
+              ),
               schema: CAREER_SELECTION_SCHEMA,
               // strengths(3)+values(3)+picks(6件×id/fitScore/keyLink) で
               // 実測 400〜500tok 前後まで伸びるため余裕を持たせる(260だと finish_reason:"length" で
@@ -164,7 +168,7 @@ export async function POST(request: Request) {
             if (!career) return;
             try {
               const reason = await generateText({
-                messages: buildReasonMessages(career, themeResults),
+                messages: buildReasonMessages(career, themeResults, session.readingLevel),
                 maxTokens: 160,
                 temperature: 0.7,
                 signal: request.signal,

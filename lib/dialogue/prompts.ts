@@ -1,6 +1,7 @@
 import type { Theme } from "./themes";
 import type { ThemeResult } from "@/lib/db/queries";
 import type { LlmMessage } from "@/lib/llm/client";
+import { readingLevelDialogueBlock, readingLevelWritingBlock, type ReadingLevel } from "@/lib/reading-level";
 
 /**
  * このテーマで LLM にあと何回まで深掘りさせてよいかの上限判定。
@@ -16,6 +17,7 @@ export function mustForceNext(theme: Theme, probeCount: number): boolean {
 export function buildTurnSystemPrompt(
   theme: Theme,
   probeCount: number,
+  readingLevel: ReadingLevel,
   priorContext = "",
 ): string {
   return `あなたは新卒キャリア面談のメンター「みらい」です。相手はインターン中の学生です。
@@ -29,6 +31,8 @@ ${theme.aspects.map((a, i) => `(${i + 1}) ${a}`).join("\n")}
 - 質問は必ず1つだけ。3文以内。敬体。評価や説教をしない。
 - 「なぜ？」を繰り返さない。「そのとき何をした？」「どの瞬間？」など場面を聞く。
 - 職業名を出してアドバイスしない。ここは自己理解の時間。
+
+${readingLevelDialogueBlock(readingLevel)}
 
 【制御タグ】
 本文のあとに空行を1つ入れ、最終行に制御タグを単独行で出力すること。
@@ -49,6 +53,7 @@ export function buildPriorThemesContext(results: ThemeResult[]): string {
 export function buildInsightMessages(
   theme: Theme,
   conversation: { role: "user" | "assistant"; content: string }[],
+  readingLevel: ReadingLevel,
 ): LlmMessage[] {
   const transcript = conversation
     .map((m) => `${m.role === "user" ? "学生" : "メンター"}: ${m.content}`)
@@ -68,7 +73,8 @@ export function buildInsightMessages(
         `「〜への言い換え」のような説明文にはしない。\n` +
         `- reframe: quote の内容を、職業的な強みとして前向きに言い換えた50〜70字の一文。\n` +
         `- summary: このテーマでの回答全体を80字程度で要約する。\n` +
-        `- tags: 該当する特性タグを2〜5個選ぶ。`,
+        `- tags: 該当する特性タグを2〜5個選ぶ。\n\n` +
+        readingLevelWritingBlock(readingLevel),
     },
     { role: "user", content: transcript },
   ];

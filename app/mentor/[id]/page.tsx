@@ -8,6 +8,7 @@ import {
 } from "@/lib/db/queries";
 import { THEMES, getTheme } from "@/lib/dialogue/themes";
 import { formatDateTime } from "@/lib/format";
+import { READING_LEVEL_LABEL } from "@/lib/reading-level";
 import { InsightDeck, type InsightCardData } from "@/components/chat/InsightDeck";
 import { MessageList, type ChatMessage } from "@/components/chat/MessageList";
 
@@ -54,6 +55,8 @@ export default async function MentorSessionPage({
             </h1>
             <p className="mt-1 text-sm text-muted">
               {STATUS_LABEL[session.status]} ・ 開始 {formatDateTime(session.createdAt)}
+              {" ・ 文章レベル "}
+              {READING_LEVEL_LABEL[session.readingLevel]}
             </p>
           </div>
           {session.status === "completed" && (

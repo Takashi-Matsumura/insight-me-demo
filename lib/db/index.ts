@@ -2,6 +2,42 @@ import { DatabaseSync } from "node:sqlite";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+/**
+ * schema.sql は全DDLが CREATE TABLE IF NOT EXISTS なので、既存DBには新カラムが
+ * 追加されない。専用のマイグレーション機構は持たない方針(追加依存ゼロ)なので、
+ * 「列が無ければ足す」だけの冪等処理をここに置く。
+ * SQLite の ALTER TABLE ADD COLUMN は datetime('now') のような非定数 DEFAULT を
+ * 許さないが、リテラル文字列 DEFAULT は使える(既存行はその値でバックフィルされる)。
+ * schema.sql 側(新規DB用)と、ここ(既存DB用)の両方に同じ定義を書く必要がある。
+ */
+function addColumnIfMissing(
+  db: DatabaseSync,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const row = db
+    .prepare("SELECT COUNT(*) AS n FROM pragma_table_info(?) WHERE name = ?")
+    .get(table, column) as unknown as { n: number };
+  if (row.n > 0) return;
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  } catch {
+    // ビルド時は複数ワーカーが同時に同じDBを開く。存在確認とALTERの間に他の
+    // ワーカーが先に追加すると "duplicate column name" になるが、目的は達成
+    // されているので握りつぶす。本当に失敗していれば後続のクエリが落ちる。
+  }
+}
+
+function migrate(db: DatabaseSync): void {
+  addColumnIfMissing(
+    db,
+    "sessions",
+    "reading_level",
+    "reading_level TEXT NOT NULL DEFAULT 'university'",
+  );
+}
+
 function createDb(): DatabaseSync {
   const dataDir = path.join(process.cwd(), "data");
   if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
@@ -14,6 +50,7 @@ function createDb(): DatabaseSync {
 
   const schemaPath = path.join(process.cwd(), "lib", "db", "schema.sql");
   db.exec(readFileSync(schemaPath, "utf8"));
+  migrate(db);
 
   return db;
 }

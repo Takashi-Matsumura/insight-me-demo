@@ -90,7 +90,12 @@ export async function POST(request: Request) {
   }
 
   const priorContext = buildPriorThemesContext(listThemeResults(sessionId));
-  const systemPrompt = buildTurnSystemPrompt(theme, session.probeCount, priorContext);
+  const systemPrompt = buildTurnSystemPrompt(
+    theme,
+    session.probeCount,
+    session.readingLevel,
+    priorContext,
+  );
   const history = listMessagesForTheme(sessionId, theme.id);
 
   const messages: LlmMessage[] = [

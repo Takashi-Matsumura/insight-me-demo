@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listSessions, type SessionStatus } from "@/lib/db/queries";
 import { formatDateTime } from "@/lib/format";
+import { READING_LEVEL_LABEL } from "@/lib/reading-level";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,9 @@ export default function MentorPage() {
               >
                 <div>
                   <p className="font-medium">{s.studentName}</p>
-                  <p className="mt-0.5 text-xs text-muted">{formatDateTime(s.createdAt)}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {formatDateTime(s.createdAt)} ・ {READING_LEVEL_LABEL[s.readingLevel]}
+                  </p>
                 </div>
                 <span
                   className={

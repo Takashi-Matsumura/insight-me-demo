@@ -8,7 +8,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   current_theme  TEXT NOT NULL DEFAULT 'flow',
   probe_count    INTEGER NOT NULL DEFAULT 0,
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  -- AIが生成する文章のレベル(lib/reading-level.ts)。
+  -- 既存DBへは lib/db/index.ts の migrate() が ALTER TABLE で追加する。ALTER は
+  -- 必ず末尾に列を足すので、新規DBと移行後DBの列順を一致させるためここも末尾に置く。
+  -- DEFAULT が 'university' なのは、移行前に作られた行が従来と同じ文体を保つため
+  -- (FALLBACK_READING_LEVEL と同値。createSession は常に明示的に値を渡すので、
+  --  この DEFAULT が効くのは移行時のバックフィルだけ)。
+  reading_level  TEXT NOT NULL DEFAULT 'university'
 );
 
 CREATE TABLE IF NOT EXISTS messages (

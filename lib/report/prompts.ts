@@ -2,6 +2,7 @@ import { getTheme } from "@/lib/dialogue/themes";
 import type { ThemeResult } from "@/lib/db/queries";
 import type { LlmMessage } from "@/lib/llm/client";
 import type { Career } from "@/lib/careers/catalog";
+import { readingLevelWritingBlock, type ReadingLevel } from "@/lib/reading-level";
 
 export function collectTags(themeResults: ThemeResult[]): string[] {
   return themeResults.flatMap((r) => r.tags);
@@ -26,7 +27,10 @@ export function buildStudentProfileText(themeResults: ThemeResult[]): string {
 }
 
 /** ステージA: ストリーミングで流す自己理解サマリ */
-export function buildSummaryMessages(profileText: string): LlmMessage[] {
+export function buildSummaryMessages(
+  profileText: string,
+  readingLevel: ReadingLevel,
+): LlmMessage[] {
   return [
     {
       role: "system",
@@ -35,14 +39,19 @@ export function buildSummaryMessages(profileText: string): LlmMessage[] {
         "気づきです。これらを一つのストーリーとして繋げ、学生本人に語りかけるように200〜280字程度で" +
         "自己理解のサマリーを書いてください。最初の一文は、この学生の核心を突く印象的な一文にしてください" +
         "（レポートの見出しとして使われます）。決めつけすぎず、しかし芯のある言い方で。" +
-        "職業名は出さないこと（職業提案は別セクションで行います）。",
+        "職業名は出さないこと（職業提案は別セクションで行います）。\n\n" +
+        readingLevelWritingBlock(readingLevel),
     },
     { role: "user", content: profileText },
   ];
 }
 
 /** ステージB: 職種選定＋強み/価値観の構造化出力 */
-export function buildSelectionMessages(profileText: string, candidates: Career[]): LlmMessage[] {
+export function buildSelectionMessages(
+  profileText: string,
+  candidates: Career[],
+  readingLevel: ReadingLevel,
+): LlmMessage[] {
   const candidateList = candidates.map((c) => `${c.id}|${c.name}|${c.oneLiner}`).join("\n");
 
   return [
@@ -57,15 +66,20 @@ export function buildSelectionMessages(profileText: string, candidates: Career[]
         "- strengths: 学生の強みを15字以内で3つ\n" +
         "- values: 学生が大事にしていることを15字以内で3つ\n" +
         "- picks: 上記候補から6件選び、それぞれ id・fitScore(50〜99)・keyLink" +
-        "(学生のどの発言と結びつくか、20字以内)\n" +
-        "候補リストに無い id は絶対に使わないこと。",
+        "(学生のどの発言と結びつくか、20字以内)\n\n" +
+        readingLevelWritingBlock(readingLevel) +
+        "\n\n候補リストに無い id は絶対に使わないこと。",
     },
     { role: "user", content: profileText },
   ];
 }
 
 /** ステージC: 職種ごとの個別の推薦理由（1件あたり短いプロンプトなので並列化が効く） */
-export function buildReasonMessages(career: Career, themeResults: ThemeResult[]): LlmMessage[] {
+export function buildReasonMessages(
+  career: Career,
+  themeResults: ThemeResult[],
+  readingLevel: ReadingLevel,
+): LlmMessage[] {
   const quotes = themeResults
     .filter((r) => r.quote)
     .map((r) => `・「${r.quote}」（${getTheme(r.themeId)?.title ?? r.themeId}）`)
@@ -78,8 +92,9 @@ export function buildReasonMessages(career: Career, themeResults: ThemeResult[])
         `あなたは新卒学生向けのキャリアアドバイザーです。\n\n【あなたが聞いた学生の言葉】\n${quotes}\n\n` +
         `【職種】${career.name}\n${career.oneLiner}\n\n` +
         "この学生にこの職種を薦める理由を、本人の言葉を1つ「」で引用しながら120字程度で書いてください。" +
-        "断定しすぎず、「〜かもしれません」のような余白を残してください。" +
-        "理由の本文だけを出力し、前置きや見出しは付けないこと。",
+        "断定しすぎず、「〜かもしれません」のような余白を残してください。\n\n" +
+        readingLevelWritingBlock(readingLevel) +
+        "\n\n理由の本文だけを出力し、前置きや見出しは付けないこと。",
     },
   ];
 }
@@ -90,6 +105,7 @@ export function buildReasonMessages(career: Career, themeResults: ThemeResult[])
 export function buildCareerFitMessages(
   career: Career,
   themeResults: ThemeResult[],
+  readingLevel: ReadingLevel,
 ): LlmMessage[] {
   const quotes = themeResults
     .filter((r) => r.quote)
@@ -111,8 +127,9 @@ export function buildCareerFitMessages(
         "(1) 上の仕事内容・ある一日から、具体的な場面をひとつ取り出す\n" +
         "(2) 本人の言葉を1つ「」で引用し、その場面と結びつける\n" +
         "職種の一般的な説明や、誰にでも当てはまる話は書かないこと。" +
-        "断定しすぎず「〜かもしれません」のような余白を残すこと。" +
-        "本文だけを出力し、前置きや見出しは付けないこと。",
+        "断定しすぎず「〜かもしれません」のような余白を残すこと。\n\n" +
+        readingLevelWritingBlock(readingLevel) +
+        "\n\n本文だけを出力し、前置きや見出しは付けないこと。",
     },
   ];
 }

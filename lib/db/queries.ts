@@ -251,6 +251,39 @@ export function listMessagesForTheme(sessionId: string, themeId: string): Messag
   return rows.map(mapMessage);
 }
 
+/**
+ * 回答の修正用。指定メッセージ以降(そのメッセージ自身を含む)をテーマから消し、
+ * セッションをそのテーマの該当時点まで巻き戻す。テーマ完了後の修正でも
+ * 古い気づきカードが残らないよう、そのテーマの theme_results も消す。
+ * 途中で落ちて「メッセージは消えたが進行状態は先のまま」にならないよう1トランザクションで行う。
+ */
+export function rewindToMessage(input: {
+  sessionId: string;
+  themeId: string;
+  fromMessageId: number;
+  probeCount: number;
+}): void {
+  db.exec("BEGIN");
+  try {
+    db.prepare("DELETE FROM messages WHERE session_id = ? AND theme_id = ? AND id >= ?").run(
+      input.sessionId,
+      input.themeId,
+      input.fromMessageId,
+    );
+    db.prepare("DELETE FROM theme_results WHERE session_id = ? AND theme_id = ?").run(
+      input.sessionId,
+      input.themeId,
+    );
+    db.prepare(
+      "UPDATE sessions SET status = 'active', current_theme = ?, probe_count = ?, updated_at = datetime('now') WHERE id = ?",
+    ).run(input.themeId, input.probeCount, input.sessionId);
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
+
 // ---------- theme_results ----------
 
 export function upsertThemeResult(input: {

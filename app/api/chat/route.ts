@@ -8,11 +8,13 @@ import { streamChat } from "@/lib/llm/chat";
 import type { LlmMessage } from "@/lib/llm/client";
 import { LlmError, llmErrorMessage } from "@/lib/llm/errors";
 import { encodeSseEvent } from "@/lib/llm/sse";
+import { findEditableAnswer } from "@/lib/dialogue/edit";
 import {
   addMessage,
   getSession,
   listMessagesForTheme,
   listThemeResults,
+  rewindToMessage,
   updateSessionProgress,
   updateSessionStatus,
   upsertThemeResult,
@@ -26,6 +28,15 @@ interface ChatRequestBody {
   skip?: unknown;
   /** true の場合、新しい発言を追加せず直前のユーザー発言に対して再生成する（再送信ボタン用） */
   regenerate?: unknown;
+  /** true の場合、直前の回答を userText で置き換え、それ以降のやり取りを作り直す（回答の修正用） */
+  edit?: unknown;
+}
+
+function parseUserText(raw: unknown): { text: string } | { error: string } {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return { error: "userText が必要です" };
+  if (text.length > 500) return { error: "発言が長すぎます（500字以内）" };
+  return { text };
 }
 
 /** 現テーマ完了に伴うセッション進行（次テーマへ or 完了扱い）を行い、遷移先情報を返す。 */
@@ -47,10 +58,36 @@ export async function POST(request: Request) {
     return Response.json({ error: "sessionId が必要です" }, { status: 400 });
   }
 
-  const session = getSession(sessionId);
+  let session = getSession(sessionId);
   if (!session) {
     return Response.json({ error: "セッションが見つかりません" }, { status: 404 });
   }
+
+  // --- 回答の修正: 直前の回答の時点まで巻き戻してから、通常の応答生成に合流する ---
+  // 対象が1つ前のテーマや完了済みセッションのこともあるので、下の状態チェックより先に行う。
+  const isEdit = body?.edit === true;
+  if (isEdit) {
+    const parsed = parseUserText(body?.userText);
+    if ("error" in parsed) {
+      return Response.json({ error: parsed.error }, { status: 400 });
+    }
+    const editable = findEditableAnswer(session);
+    if (!editable) {
+      return Response.json({ error: "この回答はもう修正できません" }, { status: 400 });
+    }
+    rewindToMessage({
+      sessionId,
+      themeId: editable.themeId,
+      fromMessageId: editable.target.id,
+      probeCount: editable.probeCount,
+    });
+    addMessage({ sessionId, themeId: editable.themeId, role: "user", content: parsed.text });
+    session = getSession(sessionId);
+    if (!session) {
+      return Response.json({ error: "セッションが見つかりません" }, { status: 404 });
+    }
+  }
+
   if (session.status !== "active") {
     return Response.json({ error: "このセッションはすでに終了しています" }, { status: 400 });
   }
@@ -69,7 +106,9 @@ export async function POST(request: Request) {
 
   const isRegenerate = body?.regenerate === true;
 
-  if (isRegenerate) {
+  if (isEdit) {
+    // 修正後の発言は上で保存済み。
+  } else if (isRegenerate) {
     // 再送信: 直前のユーザー発言に対して再生成するだけで、新しい行は追加しない。
     // (ユーザー発言を毎回無条件で追加すると、再送信のたびに同じ発言が DB に重複してしまうため)
     const existing = listMessagesForTheme(sessionId, theme.id);
@@ -78,15 +117,12 @@ export async function POST(request: Request) {
       return Response.json({ error: "再送信できる発言がありません" }, { status: 400 });
     }
   } else {
-    const userText = typeof body?.userText === "string" ? body.userText.trim() : "";
-    if (!userText) {
-      return Response.json({ error: "userText が必要です" }, { status: 400 });
-    }
-    if (userText.length > 500) {
-      return Response.json({ error: "発言が長すぎます（500字以内）" }, { status: 400 });
+    const parsed = parseUserText(body?.userText);
+    if ("error" in parsed) {
+      return Response.json({ error: parsed.error }, { status: 400 });
     }
     // ユーザー発言はストリーム開始前に保存する。落ちても入力は消えない。
-    addMessage({ sessionId, themeId: theme.id, role: "user", content: userText });
+    addMessage({ sessionId, themeId: theme.id, role: "user", content: parsed.text });
   }
 
   const priorContext = buildPriorThemesContext(listThemeResults(sessionId));

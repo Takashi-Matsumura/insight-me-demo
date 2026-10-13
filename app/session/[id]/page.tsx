@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getSession, listMessagesForTheme, listThemeResults } from "@/lib/db/queries";
 import { getTheme } from "@/lib/dialogue/themes";
+import { findEditableAnswer } from "@/lib/dialogue/edit";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import type { InsightCardData } from "@/components/chat/InsightDeck";
 
@@ -15,6 +16,9 @@ export default async function SessionPage({
   if (!session) notFound();
 
   const themeMessages = listMessagesForTheme(id, session.currentTheme);
+
+  // 直前の回答の修正ボタンをリロード後も出せるようにする。
+  const editable = findEditableAnswer(session);
 
   const initialInsights: InsightCardData[] = listThemeResults(id)
     .filter((r) => !r.skipped && r.quote && r.label && r.reframe)
@@ -45,6 +49,18 @@ export default async function SessionPage({
             }))}
             initialInsights={initialInsights}
             initialCompleted={session.status === "completed"}
+            initialPrevious={
+              editable && editable.themeId !== session.currentTheme
+                ? {
+                    themeId: editable.themeId,
+                    messages: editable.messages.map((m) => ({
+                      role: m.role,
+                      content: m.content,
+                    })),
+                  }
+                : null
+            }
+            initialCompletedEditable={session.status === "completed" && editable !== null}
           />
         </div>
       </main>

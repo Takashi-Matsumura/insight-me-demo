@@ -115,6 +115,13 @@ export function nextThemeId(currentId: string): ThemeId | null {
   return next ? next.id : null;
 }
 
+export function previousThemeId(currentId: string): ThemeId | null {
+  const current = getTheme(currentId);
+  if (!current) return null;
+  const prev = THEMES.find((t) => t.order === current.order - 1);
+  return prev ? prev.id : null;
+}
+
 export function isLastTheme(id: string): boolean {
   const theme = getTheme(id);
   return theme?.order === THEMES.length;

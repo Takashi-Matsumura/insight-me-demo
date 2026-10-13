@@ -108,7 +108,17 @@ export default async function ReportPage({
   return (
     <div className="flex flex-1 flex-col px-6 py-10">
       <main className="mx-auto w-full max-w-3xl">
-        <p className="text-sm text-muted">{session.studentName} さんのレポート</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">{session.studentName} さんのレポート</p>
+          {isComplete && (
+            <Link
+              href={`/session/${id}/report/summary`}
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
+            >
+              1画面のかんたんまとめを見る
+            </Link>
+          )}
+        </div>
 
         <div className="mt-6 flex flex-col gap-10">
           {isComplete ? (

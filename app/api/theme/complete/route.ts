@@ -81,6 +81,13 @@ export async function POST(request: Request) {
       timeoutMs: 30_000,
     });
 
+    // 生成を待つ間に回答が修正されていたら(app/api/chat の edit)、古い対話から作った
+    // カードは保存しない。修正後のテーマ完了時にあらためて呼ばれる。
+    const latest = listMessagesForTheme(sessionId, themeId);
+    if (latest.length !== history.length || latest.at(-1)?.id !== history.at(-1)?.id) {
+      return Response.json({ insight: null });
+    }
+
     const result = upsertThemeResult({
       sessionId,
       themeId,

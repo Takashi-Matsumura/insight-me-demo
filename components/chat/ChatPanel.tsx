@@ -17,6 +17,16 @@ interface ChatPanelProps {
   initialInsights: InsightCardData[];
   /** セッションが既に completed 状態でロードされたか */
   initialCompleted: boolean;
+  /** 現テーマにまだ回答が無いとき、最後の回答を直せる1つ前のテーマ（オープナーは含めない） */
+  initialPrevious: ThemeSnapshot | null;
+  /** 完了済みでロードされたとき、最後の回答をまだ直せるか（レポート生成前か） */
+  initialCompletedEditable: boolean;
+}
+
+/** あるテーマの対話。修正対象の特定と、応答完了時の確定に使う */
+interface ThemeSnapshot {
+  themeId: string;
+  messages: ChatMessage[];
 }
 
 interface StreamError {
@@ -35,12 +45,18 @@ function seedMessages(themeId: string, existing: ChatMessage[]): ChatMessage[] {
   return [...opener, ...existing];
 }
 
+function lastUserIndex(messages: ChatMessage[]): number {
+  return messages.findLastIndex((m) => m.role === "user");
+}
+
 export function ChatPanel({
   sessionId,
   initialThemeId,
   initialMessages,
   initialInsights,
   initialCompleted,
+  initialPrevious,
+  initialCompletedEditable,
 }: ChatPanelProps) {
   const [themeId, setThemeId] = useState(initialThemeId);
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
@@ -59,6 +75,21 @@ export function ChatPanel({
   // 初期値: リロード時は現テーマの既存メッセージが0件なら1問目とみなす
   // (initialMessages はオープナーを含まない現テーマぶんの既存メッセージのみ)。
   const [showChoices, setShowChoices] = useState(initialMessages.length === 0);
+  // 回答の修正。直せるのは直前の回答だけ(サーバ側の判定は lib/dialogue/edit.ts)。
+  // テーマ最後の回答は送信と同時に次テーマへ進むので、進んだ直後は previous に
+  // 残した前テーマの対話から直せるようにする。
+  const [previous, setPrevious] = useState<ThemeSnapshot | null>(() =>
+    initialPrevious
+      ? {
+          themeId: initialPrevious.themeId,
+          messages: seedMessages(initialPrevious.themeId, initialPrevious.messages),
+        }
+      : null,
+  );
+  const [completedEditable, setCompletedEditable] = useState(initialCompletedEditable);
+  const [editing, setEditing] = useState<(ThemeSnapshot & { index: number }) | null>(null);
+  // 修正でテーマを巻き戻したら増やす。巻き戻し前に走り出した気づきカード生成の結果を捨てるため。
+  const rewindCountRef = useRef(0);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -73,6 +104,7 @@ export function ChatPanel({
   }
 
   async function completeTheme(finishedThemeId: string) {
+    const rewindCount = rewindCountRef.current;
     try {
       const res = await fetch("/api/theme/complete", {
         method: "POST",
@@ -83,7 +115,7 @@ export function ChatPanel({
         insight?: { quote: string; label: string; reframe: string; tags: string[] } | null;
       };
       const insight = data.insight;
-      if (insight) {
+      if (insight && rewindCount === rewindCountRef.current) {
         const finishedTheme = getTheme(finishedThemeId);
         setInsights((prev) => [
           ...prev,
@@ -140,7 +172,14 @@ export function ChatPanel({
     };
   }, []);
 
-  async function runChatRequest(requestBody: Record<string, unknown>) {
+  // base は「このリクエストが応答を返す対象の対話」。state の themeId / messages は
+  // 修正による巻き戻しの直後だとまだ古いので、呼び出し側から明示的に受け取る。
+  // onRefused: サーバが修正を受け付けなかったとき、先に書き換えた画面を元に戻す。
+  async function runChatRequest(
+    requestBody: Record<string, unknown>,
+    base: ThemeSnapshot,
+    onRefused?: () => void,
+  ) {
     setError(null);
     setCanRetry(false);
     setSending(true);
@@ -159,6 +198,11 @@ export function ChatPanel({
 
       if (!res.ok || !res.body) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (onRefused) {
+          onRefused();
+          setError({ message: data.error ?? "修正に失敗しました", retryable: false });
+          return;
+        }
         throw new Error(data.error ?? "送信に失敗しました");
       }
 
@@ -194,14 +238,17 @@ export function ChatPanel({
             setCanRetry(evt.retryable);
           } else if (evt.type === "control") {
             setStreamingText("");
-            if (acc.trim()) {
-              setMessages((prev) => [...prev, { role: "assistant", content: acc.trim() }]);
-            }
+            const settled: ChatMessage[] = acc.trim()
+              ? [...base.messages, { role: "assistant", content: acc.trim() }]
+              : base.messages;
+            setMessages(settled);
             if (evt.action === "next") {
-              void completeTheme(themeId);
+              void completeTheme(base.themeId);
               if (evt.completed) {
                 setCompleted(true);
+                setCompletedEditable(true);
               } else if (evt.nextThemeId) {
+                setPrevious({ themeId: base.themeId, messages: settled });
                 setThemeId(evt.nextThemeId);
                 setMessages(seedMessages(evt.nextThemeId, []));
                 setShowChoices(true); // 新テーマの1問目は選択肢を見せる
@@ -228,12 +275,50 @@ export function ChatPanel({
     if (!text || sending) return;
     setInput("");
     setShowChoices(false); // 送信したら1問目用の選択肢は役目を終える
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
-    void runChatRequest({ userText: text });
+    setPrevious(null); // 新しい回答を送ったら、直せるのはその回答になる
+    const next: ChatMessage[] = [...messages, { role: "user", content: text }];
+    setMessages(next);
+    void runChatRequest({ userText: text }, { themeId, messages: next });
   }
 
   function handleRetry() {
-    void runChatRequest({ regenerate: true });
+    void runChatRequest({ regenerate: true }, { themeId, messages });
+  }
+
+  function startEdit(target: ThemeSnapshot) {
+    const index = lastUserIndex(target.messages);
+    if (index < 0 || sending) return;
+    setEditing({ ...target, index });
+  }
+
+  function handleEditSubmit(text: string) {
+    if (!editing || sending) return;
+    const target = editing.themeId;
+    const next: ChatMessage[] = [
+      ...editing.messages.slice(0, editing.index),
+      { role: "user", content: text },
+    ];
+    const before = { themeId, messages, completed, completedEditable, previous, insights, showChoices };
+
+    // 対象テーマの修正時点まで画面を巻き戻す(1つ前のテーマや完了画面からのこともある)。
+    setEditing(null);
+    rewindCountRef.current += 1;
+    setInsights((prev) => prev.filter((i) => i.themeId !== target));
+    setThemeId(target);
+    setMessages(next);
+    setCompleted(false);
+    setPrevious(null);
+    setShowChoices(false);
+
+    void runChatRequest({ edit: true, userText: text }, { themeId: target, messages: next }, () => {
+      setThemeId(before.themeId);
+      setMessages(before.messages);
+      setCompleted(before.completed);
+      setCompletedEditable(before.completedEditable);
+      setPrevious(before.previous);
+      setInsights(before.insights);
+      setShowChoices(before.showChoices);
+    });
   }
 
   async function handleSkip() {
@@ -253,8 +338,11 @@ export function ChatPanel({
       };
       if (!res.ok) throw new Error(data.error ?? "スキップに失敗しました");
 
+      // 飛ばしたテーマの回答は修正の対象外
+      setPrevious(null);
       if (data.completed) {
         setCompleted(true);
+        setCompletedEditable(false);
       } else if (data.nextThemeId) {
         setThemeId(data.nextThemeId);
         setMessages(seedMessages(data.nextThemeId, []));
@@ -282,7 +370,7 @@ export function ChatPanel({
     ]);
   }
 
-  if (completed) {
+  if (completed && !editing) {
     return (
       <div className="flex flex-col gap-6">
         <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
@@ -296,6 +384,19 @@ export function ChatPanel({
           >
             レポートを見る
           </Link>
+          {completedEditable && lastUserIndex(messages) >= 0 && (
+            <p className="mt-4 text-xs text-muted">
+              <button
+                type="button"
+                onClick={() => startEdit({ themeId, messages })}
+                className="underline decoration-dotted hover:text-foreground"
+              >
+                最後の回答を修正する
+              </button>
+              （レポートを作る前だけ直せます）
+            </p>
+          )}
+          {error && <p className="mt-3 text-xs text-red-700 dark:text-red-300">{error.message}</p>}
         </div>
         <InsightDeck insights={insights} />
         <div ref={bottomRef} aria-hidden className="h-0" />
@@ -303,7 +404,11 @@ export function ChatPanel({
     );
   }
 
-  const theme = getTheme(themeId);
+  // 修正中は対象テーマの対話(1つ前のテーマや完了済みの最終テーマのこともある)を表示する。
+  const view: ThemeSnapshot = editing ?? { themeId, messages };
+  const editableIndex = sending || editing ? -1 : lastUserIndex(messages);
+
+  const theme = getTheme(view.themeId);
   if (!theme) {
     return (
       <p className="text-sm text-muted">
@@ -314,12 +419,38 @@ export function ChatPanel({
 
   return (
     <div className="flex flex-col gap-6">
-      <ProgressRail currentThemeId={themeId} />
+      <ProgressRail currentThemeId={view.themeId} />
 
       <InsightDeck insights={insights} />
 
       <div className="rounded-lg border border-border bg-background/50 p-4">
-        <MessageList messages={messages} streamingText={streamingText} waiting={sending} />
+        <MessageList
+          messages={view.messages}
+          streamingText={streamingText}
+          waiting={sending}
+          editableIndex={editableIndex}
+          onEditStart={() => startEdit({ themeId, messages })}
+          editing={
+            editing
+              ? {
+                  index: editing.index,
+                  onSubmit: handleEditSubmit,
+                  onCancel: () => setEditing(null),
+                }
+              : undefined
+          }
+        />
+        {previous && !editing && !sending && editableIndex < 0 && (
+          <div className="mt-3 text-right">
+            <button
+              type="button"
+              onClick={() => startEdit(previous)}
+              className="text-xs text-muted underline decoration-dotted hover:text-foreground"
+            >
+              前のテーマの最後の回答を修正する
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -333,15 +464,17 @@ export function ChatPanel({
         </div>
       )}
 
-      <Composer
-        value={input}
-        onChange={setInput}
-        onSubmit={handleSubmit}
-        onSkip={handleSkip}
-        onStuck={handleStuck}
-        disabled={sending}
-        fallbackChoices={showChoices ? theme.fallbackChoices : []}
-      />
+      {!editing && (
+        <Composer
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSubmit}
+          onSkip={handleSkip}
+          onStuck={handleStuck}
+          disabled={sending}
+          fallbackChoices={showChoices ? theme.fallbackChoices : []}
+        />
+      )}
       <div ref={bottomRef} aria-hidden className="h-0" />
     </div>
   );

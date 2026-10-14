@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { renderBold } from "@/lib/formatted-text";
 

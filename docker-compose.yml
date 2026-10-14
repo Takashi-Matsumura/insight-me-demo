@@ -5,7 +5,7 @@ services:
     container_name: insight-me-demo
     restart: unless-stopped
     ports:
-      - "8040:3000"
+      - "8063:3000"
     environment:
       - LLAMA_BASE_URL=http://host.docker.internal:8080
       - LLAMA_MODEL=gemma-4-12b-it-Q4_K_M.gguf
